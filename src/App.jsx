@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, Search, User, Menu, Globe, ChevronDown, ChevronLeft, ChevronRight, ArrowUp, X, Shield, CreditCard, Banknote, QrCode, CheckCircle2 } from 'lucide-react';
+import { ShoppingBag, Search, User, Menu, Globe, ChevronDown, ChevronLeft, ChevronRight, ArrowUp, X, Shield, CreditCard, Banknote, QrCode, CheckCircle2, Printer, Receipt } from 'lucide-react';
 import './index.css';
 import './MoneyDetector.css';
 import QrisCode from './QrisCode';
@@ -126,6 +126,225 @@ const AdminPanel = ({ produkKue, handleChange, saveChanges }) => {
   );
 };
 
+// Receipt Modal Component
+const ReceiptModal = ({ receiptData, onClose }) => {
+  if (!receiptData) return null;
+
+  const handlePrint = () => {
+    const printWindow = window.open('', '_blank', 'width=400,height=700');
+    const receiptHTML = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Struk Pembayaran - Threemi Sweet</title>
+        <style>
+          @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Spectral:wght@400;600;700&display=swap');
+          * { margin: 0; padding: 0; box-sizing: border-box; }
+          body {
+            font-family: 'DM Sans', monospace, sans-serif;
+            padding: 20px;
+            max-width: 350px;
+            margin: 0 auto;
+            color: #1a1a1a;
+          }
+          .receipt-header { text-align: center; margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px dashed #ccc; }
+          .receipt-header h1 { font-family: 'Spectral', serif; font-size: 22px; margin-bottom: 4px; letter-spacing: 2px; }
+          .receipt-header p { font-size: 11px; color: #666; line-height: 1.5; }
+          .receipt-info { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dashed #ddd; font-size: 12px; }
+          .receipt-info .row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+          .receipt-info .label { color: #888; }
+          .receipt-items { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 2px dashed #ccc; }
+          .receipt-items .item { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 12px; }
+          .receipt-items .item-name { max-width: 60%; }
+          .receipt-items .item-detail { font-size: 10px; color: #888; margin-top: 2px; }
+          .receipt-total { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 2px dashed #ccc; }
+          .receipt-total .row { display: flex; justify-content: space-between; margin-bottom: 4px; font-size: 12px; }
+          .receipt-total .row.grand { font-size: 16px; font-weight: 700; margin-top: 8px; padding-top: 8px; border-top: 1px solid #eee; }
+          .receipt-footer { text-align: center; font-size: 11px; color: #888; line-height: 1.6; }
+          .receipt-footer .thanks { font-size: 13px; font-weight: 700; color: #C7A07A; margin-bottom: 4px; }
+          @media print {
+            body { padding: 10px; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="receipt-header">
+          <h1>THREEMI SWEET</h1>
+          <p>Jl. Mekar 1, Kp Gantungan No.8<br/>Pasirlayung, Kec. Cimenyan<br/>Kab. Bandung, Jawa Barat 40197</p>
+        </div>
+        <div class="receipt-info">
+          <div class="row"><span class="label">No. Transaksi</span><span>${receiptData.transactionId}</span></div>
+          <div class="row"><span class="label">Tanggal</span><span>${receiptData.date}</span></div>
+          <div class="row"><span class="label">Waktu</span><span>${receiptData.time}</span></div>
+          <div class="row"><span class="label">Kasir / Pembeli</span><span>${receiptData.username}</span></div>
+          <div class="row"><span class="label">Metode Bayar</span><span>${receiptData.paymentLabel}</span></div>
+        </div>
+        <div class="receipt-items">
+          ${receiptData.items.map(item => `
+            <div class="item">
+              <div class="item-name">
+                ${item.cake.nama}
+                ${item.flavor ? '<div class="item-detail">Flavor: ' + item.flavor + '</div>' : ''}
+                ${item.cream ? '<div class="item-detail">Cream: ' + item.cream + '</div>' : ''}
+                ${item.filling ? '<div class="item-detail">Filling: ' + item.filling + '</div>' : ''}
+              </div>
+              <div>Rp ${item.cake.harga.toLocaleString('id-ID')}</div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="receipt-total">
+          <div class="row"><span>Subtotal (${receiptData.items.length} item)</span><span>Rp ${receiptData.totalPrice.toLocaleString('id-ID')}</span></div>
+          <div class="row grand"><span>TOTAL</span><span>Rp ${receiptData.totalPrice.toLocaleString('id-ID')}</span></div>
+        </div>
+        <div class="receipt-footer">
+          <p class="thanks">✦ Terima Kasih ✦</p>
+          <p>Pesanan Anda sedang diproses.<br/>Hubungi kami di WA: 0895404957926<br/>Instagram: @threemisweet</p>
+        </div>
+      </body>
+      </html>
+    `;
+    printWindow.document.write(receiptHTML);
+    printWindow.document.close();
+    printWindow.onload = () => {
+      printWindow.print();
+    };
+  };
+
+  const paymentLabels = { cash: 'Tunai (Cash)', debit: 'Transfer Debit (BCA)', qris: 'QRIS' };
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 200 }}>
+      <motion.div
+        initial={{ y: 40, opacity: 0, scale: 0.95 }}
+        animate={{ y: 0, opacity: 1, scale: 1 }}
+        exit={{ y: 40, opacity: 0, scale: 0.95 }}
+        transition={{ type: 'spring', stiffness: 300, damping: 25 }}
+        className="modal-box receipt-modal"
+        style={{ width: '420px', maxWidth: '92%', maxHeight: '90vh', overflowY: 'auto', padding: '0', textAlign: 'left' }}
+      >
+        {/* Receipt Header with success banner */}
+        <div className="receipt-success-banner">
+          <motion.div
+            initial={{ scale: 0 }}
+            animate={{ scale: 1 }}
+            transition={{ type: 'spring', stiffness: 200, damping: 15, delay: 0.2 }}
+          >
+            <CheckCircle2 size={48} style={{ color: '#fff' }} />
+          </motion.div>
+          <motion.h3
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            style={{ color: '#fff', fontSize: '1.2rem', fontWeight: 700, marginTop: '0.5rem' }}
+          >
+            Pembayaran Berhasil!
+          </motion.h3>
+        </div>
+
+        {/* Receipt Body */}
+        <div style={{ padding: '1.5rem 2rem' }}>
+          {/* Store Info */}
+          <div style={{ textAlign: 'center', marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '2px dashed #e5e7eb' }}>
+            <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '1.4rem', letterSpacing: '0.1em', color: '#1a1a1a', marginBottom: '0.25rem' }}>THREEMI SWEET</h2>
+            <p style={{ fontSize: '0.7rem', color: '#9ca3af', lineHeight: 1.5 }}>
+              Jl. Mekar 1, Kp Gantungan No.8, Pasirlayung<br />
+              Kec. Cimenyan, Kab. Bandung, Jawa Barat 40197
+            </p>
+          </div>
+
+          {/* Transaction Info */}
+          <div style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px dashed #e5e7eb' }}>
+            {[
+              { label: 'No. Transaksi', value: receiptData.transactionId },
+              { label: 'Tanggal', value: receiptData.date },
+              { label: 'Waktu', value: receiptData.time },
+              { label: 'Pembeli', value: receiptData.username },
+              { label: 'Metode Bayar', value: receiptData.paymentLabel },
+            ].map((row, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem', fontSize: '0.78rem' }}>
+                <span style={{ color: '#9ca3af' }}>{row.label}</span>
+                <span style={{ fontWeight: 600, color: '#374151' }}>{row.value}</span>
+              </div>
+            ))}
+          </div>
+
+          {/* Items */}
+          <div style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '2px dashed #e5e7eb' }}>
+            <p style={{ fontSize: '0.68rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.1em', color: '#9ca3af', marginBottom: '0.75rem' }}>Detail Pesanan</p>
+            {receiptData.items.map((item, i) => (
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.6rem', fontSize: '0.82rem' }}>
+                <div style={{ maxWidth: '65%' }}>
+                  <div style={{ fontWeight: 600, color: '#1a1a1a' }}>{item.cake.nama}</div>
+                  {item.flavor && <div style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '2px' }}>Flavor: {item.flavor}</div>}
+                  {item.cream && <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>Cream: {item.cream}</div>}
+                  {item.filling && <div style={{ fontSize: '0.7rem', color: '#9ca3af' }}>Filling: {item.filling}</div>}
+                </div>
+                <div style={{ fontWeight: 600, color: '#374151', whiteSpace: 'nowrap' }}>Rp {item.cake.harga.toLocaleString('id-ID')}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Total */}
+          <div style={{ marginBottom: '1.25rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#6b7280', marginBottom: '0.3rem' }}>
+              <span>Subtotal ({receiptData.items.length} item)</span>
+              <span>Rp {receiptData.totalPrice.toLocaleString('id-ID')}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '1.15rem', fontWeight: 800, color: '#1a1a1a', paddingTop: '0.5rem', borderTop: '1px solid #f3f4f6' }}>
+              <span>TOTAL</span>
+              <span style={{ color: '#d9232d' }}>Rp {receiptData.totalPrice.toLocaleString('id-ID')}</span>
+            </div>
+          </div>
+
+          {/* Footer message */}
+          <div style={{ textAlign: 'center', marginBottom: '1.25rem', padding: '0.75rem', background: '#fefce8', borderRadius: '8px', border: '1px solid #fef08a' }}>
+            <p style={{ fontSize: '0.82rem', fontWeight: 700, color: '#C7A07A', marginBottom: '0.2rem' }}>✦ Terima Kasih ✦</p>
+            <p style={{ fontSize: '0.7rem', color: '#92400e', lineHeight: 1.5 }}>
+              Pesanan Anda sedang diproses.<br />
+              Hubungi kami di WA: 0895404957926
+            </p>
+          </div>
+
+          {/* Action Buttons */}
+          <div style={{ display: 'flex', gap: '0.75rem' }}>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={handlePrint}
+              style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                padding: '0.9rem', borderRadius: '50px', cursor: 'pointer',
+                background: 'linear-gradient(135deg, #C7A07A, #a98973)', color: 'white',
+                border: 'none', fontWeight: 700, fontSize: '0.8rem', letterSpacing: '0.05em',
+                fontFamily: 'inherit',
+                boxShadow: '0 4px 14px rgba(199,160,122,0.35)', transition: 'all 0.2s'
+              }}
+            >
+              <Printer size={16} />
+              CETAK STRUK
+            </motion.button>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={onClose}
+              style={{
+                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                padding: '0.9rem', borderRadius: '50px', cursor: 'pointer',
+                background: '#fff', color: '#374151',
+                border: '2px solid #e5e7eb', fontWeight: 700, fontSize: '0.8rem', letterSpacing: '0.05em',
+                fontFamily: 'inherit', transition: 'all 0.2s'
+              }}
+            >
+              <X size={16} />
+              TUTUP
+            </motion.button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
 function App() {
   const [produkKue, setProdukKue] = useState(produkKueData);
   const [filter, setFilter] = useState("SEMUA PRODUK");
@@ -153,6 +372,8 @@ function App() {
   const [qrisLoading, setQrisLoading] = useState(false);
   const [qrisUseFallback, setQrisUseFallback] = useState(false);
   const [pakasirData, setPakasirData] = useState(null); // { order_id, amount, payment_url, ... }
+  const [receiptData, setReceiptData] = useState(null);
+  const [showReceipt, setShowReceipt] = useState(false);
   const qrisTimerRef = useRef(null);
   const qrisPollingRef = useRef(null);
 
@@ -212,19 +433,31 @@ function App() {
       // Auto-submit payment (for both fallback and pakasir confirmed)
       (async () => {
         try {
+          const totalPrice = cartItems.reduce((acc, item) => acc + item.cake.harga, 0);
           const response = await fetch('http://localhost:5000/checkout', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               username: user.username,
-              totalPrice: cartItems.reduce((acc, item) => acc + item.cake.harga, 0),
+              totalPrice: totalPrice,
               cartItems: cartItems,
               paymentMethod: 'qris'
             })
           });
           const data = await response.json();
           if (response.ok) {
-            alert('✅ Pembayaran QRIS berhasil! Pesanan Anda sedang diproses.');
+            const now = new Date();
+            setReceiptData({
+              transactionId: 'TMS-' + now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0') + '-' + String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0') + String(now.getSeconds()).padStart(2,'0'),
+              date: now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+              time: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+              username: user.username,
+              paymentMethod: 'qris',
+              paymentLabel: 'QRIS',
+              items: [...cartItems],
+              totalPrice: totalPrice
+            });
+            setShowReceipt(true);
             setCartItems([]);
             setShowCheckout(false);
             setPaymentMethod('');
@@ -917,19 +1150,34 @@ function App() {
                     style={{ width: '100%', marginTop: '0.5rem' }}
                     onClick={async () => {
                       try {
+                        const totalPrice = cartItems.reduce((acc, item) => acc + item.cake.harga, 0);
+                        const currentPaymentMethod = paymentMethod;
+                        const currentCartItems = [...cartItems];
                         const response = await fetch('http://localhost:5000/checkout', {
                           method: 'POST',
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
                             username: user.username,
-                            totalPrice: cartItems.reduce((acc, item) => acc + item.cake.harga, 0),
+                            totalPrice: totalPrice,
                             cartItems: cartItems,
-                            paymentMethod: paymentMethod
+                            paymentMethod: currentPaymentMethod
                           })
                         });
                         const data = await response.json();
                         if (response.ok) {
-                          alert('Pembayaran berhasil dikonfirmasi dan pesanan sedang diproses!');
+                          const paymentLabels = { cash: 'Tunai (Cash)', debit: 'Transfer Debit (BCA)', qris: 'QRIS' };
+                          const now = new Date();
+                          setReceiptData({
+                            transactionId: 'TMS-' + now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0') + '-' + String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0') + String(now.getSeconds()).padStart(2,'0'),
+                            date: now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+                            time: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                            username: user.username,
+                            paymentMethod: currentPaymentMethod,
+                            paymentLabel: paymentLabels[currentPaymentMethod] || currentPaymentMethod,
+                            items: currentCartItems,
+                            totalPrice: totalPrice
+                          });
+                          setShowReceipt(true);
                           setCartItems([]);
                           setShowCheckout(false);
                           setPaymentMethod('');
@@ -963,6 +1211,19 @@ function App() {
           <MoneyDetector onClose={() => setShowMoneyDetector(false)} />
         </Suspense>
       )}
+
+      {/* Receipt Modal */}
+      <AnimatePresence>
+        {showReceipt && receiptData && (
+          <ReceiptModal
+            receiptData={receiptData}
+            onClose={() => {
+              setShowReceipt(false);
+              setReceiptData(null);
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       {/* KONTEN UTAMA: Berbeda Berdasarkan Role */}
       {isLoggedIn && role === 'admin' ? (
