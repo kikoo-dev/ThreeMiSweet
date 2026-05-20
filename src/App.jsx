@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, lazy, Suspense } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ShoppingBag, Search, User, Menu, Globe, ChevronDown, ChevronLeft, ChevronRight, ArrowUp, X, Shield, CreditCard, Banknote, QrCode, CheckCircle2, Printer, Receipt } from 'lucide-react';
+import { ShoppingBag, Search, User, Menu, Globe, ChevronDown, ChevronLeft, ChevronRight, ArrowUp, X, Shield, CreditCard, Banknote, QrCode, CheckCircle2, Printer, Receipt, Plus, Trash2, Edit3, Upload, Save, Image as ImageIcon, FileText, ClipboardList, Phone, UserCheck, Eye, AlertTriangle } from 'lucide-react';
 import './index.css';
 import './MoneyDetector.css';
 import QrisCode from './QrisCode';
@@ -89,39 +89,348 @@ const ProductCard = ({ kue, onAddToCart }) => {
   );
 };
 
-// Admin Panel Component for editing products
-const AdminPanel = ({ produkKue, handleChange, saveChanges }) => {
+// Admin Panel Component - Full CRUD
+const AdminPanel = ({ produkKue, onRefresh }) => {
+  const [editingProduct, setEditingProduct] = useState(null);
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [newProduct, setNewProduct] = useState({ nama: '', kategori: 'Whole Cake', harga: '', img: '', tags: '' });
+  const [newImageFile, setNewImageFile] = useState(null);
+  const [editImageFile, setEditImageFile] = useState(null);
+  const [newImagePreview, setNewImagePreview] = useState('');
+  const [editImagePreview, setEditImagePreview] = useState('');
+  const fileInputRef = useRef(null);
+  const editFileInputRef = useRef(null);
+
+  const kategoriOptions = ['Whole Cake', 'Cheesecake', 'Bento Cake', 'Custom Cake', 'Premium Cake', 'Seasonal'];
+
+  const handleNewImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setNewImageFile(file);
+      setNewImagePreview(URL.createObjectURL(file));
+      setNewProduct(p => ({ ...p, img: '' }));
+    }
+  };
+
+  const handleEditImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setEditImageFile(file);
+      setEditImagePreview(URL.createObjectURL(file));
+    }
+  };
+
+  // CREATE
+  const handleAdd = async () => {
+    if (!newProduct.nama || !newProduct.harga) return alert('Nama dan Harga wajib diisi');
+    setSaving(true);
+    try {
+      const formData = new FormData();
+      formData.append('nama', newProduct.nama);
+      formData.append('kategori', newProduct.kategori);
+      formData.append('harga', newProduct.harga);
+      formData.append('tags', newProduct.tags);
+      if (newImageFile) {
+        formData.append('image', newImageFile);
+      } else if (newProduct.img) {
+        formData.append('img', newProduct.img);
+      }
+      const res = await fetch('http://localhost:5000/products', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (res.ok) {
+        setNewProduct({ nama: '', kategori: 'Whole Cake', harga: '', img: '', tags: '' });
+        setNewImageFile(null);
+        setNewImagePreview('');
+        setShowAddForm(false);
+        onRefresh();
+      } else {
+        alert(data.message || 'Gagal menambahkan produk');
+      }
+    } catch { alert('Error menghubungi server'); }
+    setSaving(false);
+  };
+
+  // UPDATE
+  const handleUpdate = async () => {
+    if (!editingProduct) return;
+    setSaving(true);
+    try {
+      const formData = new FormData();
+      formData.append('nama', editingProduct.nama);
+      formData.append('kategori', editingProduct.kategori);
+      formData.append('harga', editingProduct.harga);
+      formData.append('tags', Array.isArray(editingProduct.tags) ? editingProduct.tags.join(',') : editingProduct.tags);
+      if (editImageFile) {
+        formData.append('image', editImageFile);
+      } else {
+        formData.append('img', editingProduct.img || '');
+      }
+      const res = await fetch(`http://localhost:5000/products/${editingProduct.id}`, { method: 'PUT', body: formData });
+      if (res.ok) {
+        setEditingProduct(null);
+        setEditImageFile(null);
+        setEditImagePreview('');
+        onRefresh();
+      } else {
+        const data = await res.json();
+        alert(data.message || 'Gagal mengupdate produk');
+      }
+    } catch { alert('Error menghubungi server'); }
+    setSaving(false);
+  };
+
+  // DELETE
+  const handleDelete = async (id) => {
+    try {
+      const res = await fetch(`http://localhost:5000/products/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setDeleteConfirm(null);
+        onRefresh();
+      } else {
+        const data = await res.json();
+        alert(data.message || 'Gagal menghapus produk');
+      }
+    } catch { alert('Error menghubungi server'); }
+  };
+
+  const inputStyle = { width: '100%', padding: '0.6rem 0.75rem', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '0.85rem', fontFamily: 'inherit', outline: 'none', transition: 'border-color 0.2s' };
+  const labelStyle = { fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6b7280', marginBottom: '0.3rem', display: 'block' };
+
   return (
-    <section className="admin-panel" style={{ padding: '2rem', background: '#fff', marginTop: '2rem', borderRadius: '12px', boxShadow: '0 4px 20px rgba(0,0,0,0.08)', border: '1px solid #eee' }}>
+    <section style={{ marginTop: '1rem' }}>
+      {/* Header + Add Button */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <h2 style={{ fontSize: '1.5rem', color: '#333' }}>Admin: Manajemen Menu Kue</h2>
-        <button className="btn-submit" onClick={saveChanges} style={{ width: 'auto', padding: '0.8rem 2rem' }}>SIMPAN PERUBAHAN KE DATABASE</button>
+        <div>
+          <h2 style={{ fontSize: '1.4rem', color: '#1a1a1a', fontWeight: 700, margin: 0 }}>Manajemen Produk</h2>
+          <p style={{ fontSize: '0.8rem', color: '#9ca3af', margin: '0.25rem 0 0' }}>{produkKue.length} produk terdaftar</p>
+        </div>
+        <motion.button
+          whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }}
+          onClick={() => setShowAddForm(!showAddForm)}
+          style={{
+            display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.7rem 1.5rem',
+            background: showAddForm ? '#ef4444' : 'linear-gradient(135deg, #C7A07A, #a98973)',
+            color: '#fff', border: 'none', borderRadius: '50px', fontWeight: 700, fontSize: '0.78rem',
+            letterSpacing: '0.05em', cursor: 'pointer', fontFamily: 'inherit',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.12)'
+          }}
+        >
+          {showAddForm ? <><X size={16} /> BATAL</> : <><Plus size={16} /> TAMBAH PRODUK</>}
+        </motion.button>
       </div>
 
-      <div style={{ maxHeight: '400px', overflowY: 'auto', paddingRight: '1rem' }}>
-        {produkKue.map(k => (
-          <div key={k.id} style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: '1rem', marginBottom: '1rem', alignItems: 'center', padding: '1rem', background: '#f9f9f9', borderRadius: '8px' }}>
-            <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-              <img src={k.img} alt="" style={{ width: '40px', height: '40px', borderRadius: '4px', objectFit: 'cover' }} />
-              <input
-                type="text"
-                value={k.nama}
-                onChange={e => handleChange(k.id, 'nama', e.target.value)}
-                style={{ flex: 1, padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }}
-                placeholder="Nama Kue"
-              />
+      {/* Add Product Form */}
+      <AnimatePresence>
+        {showAddForm && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+            style={{ background: '#f9fafb', borderRadius: '12px', padding: '1.5rem', marginBottom: '1.5rem', border: '2px dashed #d1d5db' }}
+          >
+            <h3 style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '1rem', color: '#374151' }}>Tambah Produk Baru</h3>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+              <div>
+                <label style={labelStyle}>Nama Produk *</label>
+                <input style={inputStyle} value={newProduct.nama} onChange={e => setNewProduct(p => ({ ...p, nama: e.target.value }))} placeholder="Nama kue..." />
+              </div>
+              <div>
+                <label style={labelStyle}>Kategori</label>
+                <select style={inputStyle} value={newProduct.kategori} onChange={e => setNewProduct(p => ({ ...p, kategori: e.target.value }))}>
+                  {kategoriOptions.map(k => <option key={k} value={k}>{k}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={labelStyle}>Harga (Rp) *</label>
+                <input style={inputStyle} type="number" value={newProduct.harga} onChange={e => setNewProduct(p => ({ ...p, harga: e.target.value }))} placeholder="385000" />
+              </div>
+              <div>
+                <label style={labelStyle}>Tags</label>
+                <select style={inputStyle} value={newProduct.tags} onChange={e => setNewProduct(p => ({ ...p, tags: e.target.value }))}>
+                  <option value="">Tidak ada</option>
+                  <option value="Best Seller">Best Seller</option>
+                </select>
+              </div>
+              <div style={{ gridColumn: '1 / -1' }}>
+                <label style={labelStyle}>Foto Produk</label>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                  <div style={{ flex: 1 }}>
+                    <input type="file" accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={handleNewImageChange} />
+                    <button onClick={() => fileInputRef.current?.click()} style={{
+                      display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1rem',
+                      background: '#fff', border: '1px solid #d1d5db', borderRadius: '8px', cursor: 'pointer',
+                      fontSize: '0.82rem', fontFamily: 'inherit', color: '#374151', width: '100%', justifyContent: 'center'
+                    }}>
+                      <Upload size={16} /> {newImageFile ? newImageFile.name : 'Upload Gambar'}
+                    </button>
+                    <p style={{ fontSize: '0.7rem', color: '#9ca3af', marginTop: '0.4rem' }}>atau masukkan URL gambar:</p>
+                    <input style={{ ...inputStyle, marginTop: '0.3rem' }} value={newProduct.img} onChange={e => { setNewProduct(p => ({ ...p, img: e.target.value })); setNewImageFile(null); setNewImagePreview(''); }} placeholder="https://..." disabled={!!newImageFile} />
+                  </div>
+                  {(newImagePreview || newProduct.img) && (
+                    <img src={newImagePreview || newProduct.img} alt="Preview" style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #e5e7eb' }} />
+                  )}
+                </div>
+              </div>
             </div>
-            <input
-              type="number"
-              value={k.harga}
-              onChange={e => handleChange(k.id, 'harga', Number(e.target.value))}
-              style={{ padding: '0.5rem', border: '1px solid #ddd', borderRadius: '4px' }}
-              placeholder="Harga"
+            <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleAdd} disabled={saving}
+              style={{
+                marginTop: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                width: '100%', padding: '0.8rem', background: 'linear-gradient(135deg, #16a34a, #15803d)',
+                color: '#fff', border: 'none', borderRadius: '50px', fontWeight: 700, fontSize: '0.8rem',
+                letterSpacing: '0.05em', cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: saving ? 0.6 : 1
+              }}
+            >
+              <Save size={16} /> {saving ? 'MENYIMPAN...' : 'SIMPAN PRODUK BARU'}
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Product List */}
+      <div style={{ display: 'grid', gap: '0.75rem' }}>
+        {produkKue.map(k => (
+          <motion.div key={k.id} layout
+            style={{
+              display: 'grid', gridTemplateColumns: '60px 1fr auto auto auto',
+              gap: '1rem', alignItems: 'center', padding: '1rem 1.25rem',
+              background: '#fff', borderRadius: '10px', border: '1px solid #f3f4f6',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.04)', transition: 'box-shadow 0.2s'
+            }}
+          >
+            <img src={k.img || 'https://placehold.co/60x60/f3f4f6/9ca3af?text=No+Img'} alt={k.nama}
+              style={{ width: '60px', height: '60px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #f3f4f6' }}
             />
-            <span style={{ fontSize: '0.8rem', color: '#888' }}>ID: {k.id}</span>
-          </div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1a1a1a', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{k.nama}</div>
+              <div style={{ fontSize: '0.72rem', color: '#9ca3af', marginTop: '2px' }}>
+                {k.kategori}
+                {Array.isArray(k.tags) && k.tags.includes('Best Seller') && (
+                  <span style={{ marginLeft: '0.5rem', background: '#fef3c7', color: '#92400e', padding: '1px 6px', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 600 }}>★ Best Seller</span>
+                )}
+              </div>
+            </div>
+            <div style={{ fontWeight: 800, color: '#d9232d', fontSize: '0.95rem', whiteSpace: 'nowrap' }}>Rp {Number(k.harga).toLocaleString('id-ID')}</div>
+            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+              onClick={() => { setEditingProduct({ ...k, tags: Array.isArray(k.tags) ? k.tags.join(',') : k.tags }); setEditImageFile(null); setEditImagePreview(''); }}
+              style={{ width: '36px', height: '36px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#eff6ff', border: 'none', color: '#2563eb', cursor: 'pointer' }}
+            >
+              <Edit3 size={16} />
+            </motion.button>
+            <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }}
+              onClick={() => setDeleteConfirm(k)}
+              style={{ width: '36px', height: '36px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fef2f2', border: 'none', color: '#ef4444', cursor: 'pointer' }}
+            >
+              <Trash2 size={16} />
+            </motion.button>
+          </motion.div>
         ))}
       </div>
+
+      {/* Edit Modal */}
+      <AnimatePresence>
+        {editingProduct && (
+          <div className="modal-overlay" style={{ zIndex: 300 }}>
+            <motion.div initial={{ y: 30, opacity: 0, scale: 0.95 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 30, opacity: 0, scale: 0.95 }}
+              style={{ background: '#fff', borderRadius: '16px', padding: '2rem', width: '500px', maxWidth: '92%', maxHeight: '90vh', overflowY: 'auto', position: 'relative', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }}
+            >
+              <button onClick={() => { setEditingProduct(null); setEditImageFile(null); setEditImagePreview(''); }} className="btn-close"><X size={20} /></button>
+              <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '1.4rem', marginBottom: '1.5rem', color: '#1a1a1a' }}>Edit Produk</h3>
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                <div>
+                  <label style={labelStyle}>Nama Produk</label>
+                  <input style={inputStyle} value={editingProduct.nama} onChange={e => setEditingProduct(p => ({ ...p, nama: e.target.value }))} />
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                  <div>
+                    <label style={labelStyle}>Kategori</label>
+                    <select style={inputStyle} value={editingProduct.kategori} onChange={e => setEditingProduct(p => ({ ...p, kategori: e.target.value }))}>
+                      {kategoriOptions.map(k2 => <option key={k2} value={k2}>{k2}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Harga (Rp)</label>
+                    <input style={inputStyle} type="number" value={editingProduct.harga} onChange={e => setEditingProduct(p => ({ ...p, harga: Number(e.target.value) }))} />
+                  </div>
+                </div>
+                <div>
+                  <label style={labelStyle}>Tags</label>
+                  <select style={inputStyle} value={editingProduct.tags} onChange={e => setEditingProduct(p => ({ ...p, tags: e.target.value }))}>
+                    <option value="">Tidak ada</option>
+                    <option value="Best Seller">Best Seller</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={labelStyle}>Foto Produk</label>
+                  <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1 }}>
+                      <input type="file" accept="image/*" ref={editFileInputRef} style={{ display: 'none' }} onChange={handleEditImageChange} />
+                      <button onClick={() => editFileInputRef.current?.click()} style={{
+                        display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1rem', width: '100%', justifyContent: 'center',
+                        background: '#fff', border: '1px solid #d1d5db', borderRadius: '8px', cursor: 'pointer', fontSize: '0.82rem', fontFamily: 'inherit', color: '#374151'
+                      }}>
+                        <Upload size={16} /> {editImageFile ? editImageFile.name : 'Upload Gambar Baru'}
+                      </button>
+                      <input style={{ ...inputStyle, marginTop: '0.5rem' }} value={editImageFile ? '' : (editingProduct.img || '')}
+                        onChange={e => { setEditingProduct(p => ({ ...p, img: e.target.value })); setEditImageFile(null); setEditImagePreview(''); }}
+                        placeholder="atau URL gambar..." disabled={!!editImageFile} />
+                    </div>
+                    <img src={editImagePreview || editingProduct.img || 'https://placehold.co/80x80/f3f4f6/9ca3af?text=No+Img'} alt="Preview"
+                      style={{ width: '80px', height: '80px', objectFit: 'cover', borderRadius: '8px', border: '1px solid #e5e7eb' }} />
+                  </div>
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem' }}>
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handleUpdate} disabled={saving}
+                  style={{
+                    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.85rem',
+                    background: 'linear-gradient(135deg, #C7A07A, #a98973)', color: '#fff', border: 'none', borderRadius: '50px',
+                    fontWeight: 700, fontSize: '0.8rem', letterSpacing: '0.05em', cursor: saving ? 'not-allowed' : 'pointer', fontFamily: 'inherit', opacity: saving ? 0.6 : 1
+                  }}
+                >
+                  <Save size={16} /> {saving ? 'MENYIMPAN...' : 'SIMPAN PERUBAHAN'}
+                </motion.button>
+                <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }}
+                  onClick={() => { setEditingProduct(null); setEditImageFile(null); setEditImagePreview(''); }}
+                  style={{
+                    flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.85rem',
+                    background: '#fff', color: '#374151', border: '2px solid #e5e7eb', borderRadius: '50px',
+                    fontWeight: 700, fontSize: '0.8rem', letterSpacing: '0.05em', cursor: 'pointer', fontFamily: 'inherit'
+                  }}
+                >
+                  <X size={16} /> BATAL
+                </motion.button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Modal */}
+      <AnimatePresence>
+        {deleteConfirm && (
+          <div className="modal-overlay" style={{ zIndex: 300 }}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              style={{ background: '#fff', borderRadius: '16px', padding: '2rem', width: '400px', maxWidth: '90%', textAlign: 'center', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }}
+            >
+              <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+                <Trash2 size={24} style={{ color: '#ef4444' }} />
+              </div>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem', color: '#1a1a1a' }}>Hapus Produk?</h3>
+              <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '1.5rem' }}>
+                <strong>"{deleteConfirm.nama}"</strong> akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.
+              </p>
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button onClick={() => handleDelete(deleteConfirm.id)}
+                  style={{ flex: 1, padding: '0.8rem', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '50px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}
+                >HAPUS</button>
+                <button onClick={() => setDeleteConfirm(null)}
+                  style={{ flex: 1, padding: '0.8rem', background: '#fff', color: '#374151', border: '2px solid #e5e7eb', borderRadius: '50px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}
+                >BATAL</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </section>
   );
 };
@@ -131,7 +440,6 @@ const ReceiptModal = ({ receiptData, onClose }) => {
   if (!receiptData) return null;
 
   const handlePrint = () => {
-    const printWindow = window.open('', '_blank', 'width=400,height=700');
     const receiptHTML = `
       <!DOCTYPE html>
       <html>
@@ -203,11 +511,74 @@ const ReceiptModal = ({ receiptData, onClose }) => {
       </body>
       </html>
     `;
-    printWindow.document.write(receiptHTML);
-    printWindow.document.close();
-    printWindow.onload = () => {
-      printWindow.print();
-    };
+
+    // Method 1: Try using a hidden iframe (avoids popup blockers)
+    try {
+      // Remove any existing print iframe
+      const existingFrame = document.getElementById('receipt-print-frame');
+      if (existingFrame) existingFrame.remove();
+
+      const iframe = document.createElement('iframe');
+      iframe.id = 'receipt-print-frame';
+      iframe.style.position = 'fixed';
+      iframe.style.right = '0';
+      iframe.style.bottom = '0';
+      iframe.style.width = '0';
+      iframe.style.height = '0';
+      iframe.style.border = 'none';
+      iframe.style.opacity = '0';
+      iframe.style.pointerEvents = 'none';
+      document.body.appendChild(iframe);
+
+      const iframeDoc = iframe.contentWindow || iframe.contentDocument;
+      const doc = iframeDoc.document || iframeDoc;
+      doc.open();
+      doc.write(receiptHTML);
+      doc.close();
+
+      // Wait for content (including fonts) to load before printing
+      iframe.onload = () => {
+        setTimeout(() => {
+          try {
+            iframe.contentWindow.focus();
+            iframe.contentWindow.print();
+          } catch (e) {
+            // If iframe print fails, fall back to window.open
+            fallbackPrint(receiptHTML);
+          }
+          // Clean up iframe after a delay
+          setTimeout(() => {
+            const frame = document.getElementById('receipt-print-frame');
+            if (frame) frame.remove();
+          }, 2000);
+        }, 500); // Small delay to let fonts load
+      };
+    } catch (e) {
+      // Method 2: Fallback to window.open
+      fallbackPrint(receiptHTML);
+    }
+  };
+
+  const fallbackPrint = (receiptHTML) => {
+    const printWindow = window.open('', '_blank', 'width=400,height=700');
+    if (printWindow) {
+      printWindow.document.write(receiptHTML);
+      printWindow.document.close();
+      printWindow.onload = () => {
+        printWindow.focus();
+        printWindow.print();
+      };
+      // Also try print after a short delay in case onload already fired
+      setTimeout(() => {
+        try {
+          printWindow.focus();
+          printWindow.print();
+        } catch (e) { /* ignore */ }
+      }, 1000);
+    } else {
+      // Method 3: Last resort - use current window print with receipt content
+      alert('Popup terblokir oleh browser. Silakan izinkan popup untuk mencetak struk, atau gunakan Ctrl+P untuk mencetak halaman ini.');
+    }
   };
 
   const paymentLabels = { cash: 'Tunai (Cash)', debit: 'Transfer Debit (BCA)', qris: 'QRIS' };
@@ -345,6 +716,416 @@ const ReceiptModal = ({ receiptData, onClose }) => {
   );
 };
 
+// Customer Contract Modal
+const CustomerContractModal = ({ onClose, onSuccess, username }) => {
+  const [nama, setNama] = useState('');
+  const [telepon, setTelepon] = useState('');
+  const [agreed, setAgreed] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError('');
+    if (!nama.trim()) return setError('Nama lengkap wajib diisi');
+    if (!telepon.trim()) return setError('Nomor telepon wajib diisi');
+    if (!/^[0-9+\-\s]{8,15}$/.test(telepon.trim())) return setError('Format nomor telepon tidak valid');
+    if (!agreed) return setError('Anda harus menyetujui syarat dan ketentuan');
+
+    setLoading(true);
+    try {
+      const res = await fetch('http://localhost:5000/contracts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          nama_pelanggan: nama.trim(),
+          nomor_telepon: telepon.trim(),
+          username: username || null,
+          agreement_accepted: true,
+          agreement_text: 'Menyetujui syarat dan ketentuan penggunaan website Threemi Sweet'
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setSuccess(true);
+      } else {
+        setError(data.message || 'Gagal menyimpan kontrak');
+      }
+    } catch { setError('Gagal menghubungi server'); }
+    setLoading(false);
+  };
+
+  const inputStyle = { width: '100%', padding: '0.85rem 1rem', border: '2px solid #e5e7eb', borderRadius: '12px', fontSize: '0.9rem', fontFamily: 'inherit', outline: 'none', transition: 'all 0.3s', background: '#fafafa' };
+
+  const handlePrintContract = () => {
+    const now = new Date();
+    const contractHTML = `<!DOCTYPE html><html><head><title>Kontrak Pelanggan - Threemi Sweet</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Spectral:wght@400;600;700&display=swap');
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'DM Sans',sans-serif;padding:40px;max-width:700px;margin:0 auto;color:#1a1a1a}
+.header{text-align:center;border-bottom:3px double #C7A07A;padding-bottom:20px;margin-bottom:24px}
+.header h1{font-family:'Spectral',serif;font-size:26px;letter-spacing:3px;margin-bottom:4px}
+.header p{font-size:11px;color:#666;line-height:1.6}
+.contract-title{text-align:center;margin-bottom:24px}
+.contract-title h2{font-size:18px;text-transform:uppercase;letter-spacing:2px;border:2px solid #1a1a1a;display:inline-block;padding:8px 24px}
+.info-table{width:100%;border-collapse:collapse;margin-bottom:24px}
+.info-table td{padding:8px 12px;font-size:13px;border-bottom:1px solid #eee}
+.info-table td:first-child{font-weight:700;color:#666;width:40%;text-transform:uppercase;font-size:11px;letter-spacing:0.5px}
+.terms{margin-bottom:24px;padding:16px 20px;background:#f9f9f9;border-radius:8px;border:1px solid #eee}
+.terms h3{font-size:13px;font-weight:700;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px}
+.terms ol{padding-left:20px;font-size:12px;color:#444;line-height:1.8}
+.agreement{margin-bottom:30px;padding:14px 20px;border:2px solid #C7A07A;border-radius:8px;background:#fffbf5}
+.agreement p{font-size:12px;line-height:1.6}
+.agreement strong{color:#C7A07A}
+.signatures{display:flex;justify-content:space-between;margin-top:40px;padding-top:20px}
+.sig-box{text-align:center;width:45%}
+.sig-box .line{border-bottom:1px solid #333;height:60px;margin-bottom:8px}
+.sig-box p{font-size:11px;color:#666}
+.sig-box .name{font-weight:700;font-size:13px;color:#1a1a1a}
+.footer{text-align:center;margin-top:30px;padding-top:16px;border-top:2px double #C7A07A;font-size:10px;color:#999}
+.stamp{display:inline-block;border:2px solid #16a34a;color:#16a34a;padding:6px 16px;border-radius:4px;font-weight:700;font-size:11px;transform:rotate(-5deg);margin-bottom:10px}
+@media print{body{padding:20px}}
+</style></head><body>
+<div class="header">
+  <h1>THREEMI SWEET</h1>
+  <p>Jl. Mekar 1, Kp Gantungan No.8, RT.02/RW.22, Pasirlayung<br>Kec. Cimenyan, Kab. Bandung, Jawa Barat 40197<br>WA: 0895404957926 | IG: @threemisweet</p>
+</div>
+<div class="contract-title"><h2>Kontrak Pelanggan</h2></div>
+<table class="info-table">
+  <tr><td>Nomor Kontrak</td><td>CTR-${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}-${String(now.getHours()).padStart(2, '0')}${String(now.getMinutes()).padStart(2, '0')}${String(now.getSeconds()).padStart(2, '0')}</td></tr>
+  <tr><td>Tanggal</td><td>${now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</td></tr>
+  <tr><td>Nama Pelanggan</td><td><strong>${nama}</strong></td></tr>
+  <tr><td>Nomor Telepon</td><td>${telepon}</td></tr>
+  ${username ? `<tr><td>Username</td><td>@${username}</td></tr>` : ''}
+</table>
+<div class="terms">
+  <h3>Syarat & Ketentuan Penggunaan Website</h3>
+  <ol>
+    <li>Data yang diberikan adalah benar dan akurat.</li>
+    <li>Pelanggan bersedia menerima informasi terkait layanan Threemi Sweet melalui nomor telepon yang diberikan.</li>
+    <li>Pelanggan setuju untuk menggunakan website ini sesuai dengan ketentuan yang berlaku.</li>
+    <li>Data pribadi pelanggan akan dijaga kerahasiaannya dan tidak akan dibagikan kepada pihak ketiga tanpa izin.</li>
+    <li>Threemi Sweet berhak mengubah syarat dan ketentuan ini sewaktu-waktu dengan pemberitahuan.</li>
+    <li>Pelanggan bertanggung jawab atas semua aktivitas yang dilakukan melalui akun di website ini.</li>
+  </ol>
+</div>
+<div class="agreement">
+  <div class="stamp">✓ DISETUJUI</div>
+  <p>Dengan menandatangani kontrak ini, <strong>${nama}</strong> menyatakan telah membaca, memahami, dan <strong>menyetujui</strong> seluruh syarat dan ketentuan penggunaan website Threemi Sweet yang tertera di atas.</p>
+</div>
+<div class="signatures">
+  <div class="sig-box"><div class="line"></div><p class="name">${nama}</p><p>Pelanggan</p></div>
+  <div class="sig-box"><div class="line"></div><p class="name">Threemi Sweet</p><p>Pihak Penyedia</p></div>
+</div>
+<div class="footer"><p>Dokumen ini dicetak secara digital pada ${now.toLocaleString('id-ID')}</p><p>© ${now.getFullYear()} Threemi Sweet. All rights reserved.</p></div>
+</body></html>`;
+
+    try {
+      const existing = document.getElementById('contract-print-frame');
+      if (existing) existing.remove();
+      const iframe = document.createElement('iframe');
+      iframe.id = 'contract-print-frame';
+      iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:none;opacity:0;pointer-events:none';
+      document.body.appendChild(iframe);
+      const doc = iframe.contentWindow.document;
+      doc.open(); doc.write(contractHTML); doc.close();
+      iframe.onload = () => { setTimeout(() => { iframe.contentWindow.focus(); iframe.contentWindow.print(); }, 500); setTimeout(() => { const f = document.getElementById('contract-print-frame'); if (f) f.remove(); }, 3000); };
+    } catch {
+      const w = window.open('', '_blank', 'width=750,height=900');
+      if (w) { w.document.write(contractHTML); w.document.close(); w.onload = () => { w.focus(); w.print(); }; }
+    }
+  };
+
+  if (success) {
+    return (
+      <div className="modal-overlay" style={{ zIndex: 250 }}>
+        <motion.div initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+          style={{ background: '#fff', borderRadius: '20px', padding: '0', width: '480px', maxWidth: '92%', textAlign: 'center', boxShadow: '0 25px 60px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
+          {/* Success Banner */}
+          <div style={{ background: 'linear-gradient(135deg, #16a34a, #15803d)', padding: '2rem 1.5rem', position: 'relative', overflow: 'hidden' }}>
+            <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 30% 50%, rgba(255,255,255,0.12) 0%, transparent 60%)', pointerEvents: 'none' }} />
+            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: 'spring', stiffness: 200, delay: 0.2 }}>
+              <CheckCircle2 size={48} style={{ color: '#fff' }} />
+            </motion.div>
+            <h3 style={{ color: '#fff', fontSize: '1.3rem', fontWeight: 700, marginTop: '0.5rem' }}>Kontrak Berhasil Disimpan!</h3>
+          </div>
+
+          {/* Contract Summary */}
+          <div style={{ padding: '1.5rem 2rem', textAlign: 'left' }}>
+            <div style={{ background: '#f9fafb', borderRadius: '10px', padding: '1rem 1.25rem', marginBottom: '1.25rem' }}>
+              {[
+                { label: 'Nama', value: nama },
+                { label: 'No. Telepon', value: telepon },
+                { label: 'Tanggal', value: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) },
+                { label: 'Status', value: '✅ Disetujui' },
+              ].map((r, i) => (
+                <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', borderBottom: i < 3 ? '1px solid #e5e7eb' : 'none' }}>
+                  <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>{r.label}</span>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#374151' }}>{r.value}</span>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={handlePrintContract}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.9rem', borderRadius: '50px', cursor: 'pointer', background: 'linear-gradient(135deg, #C7A07A, #a98973)', color: '#fff', border: 'none', fontWeight: 700, fontSize: '0.8rem', letterSpacing: '0.05em', fontFamily: 'inherit', boxShadow: '0 4px 14px rgba(199,160,122,0.35)' }}>
+                <Printer size={16} /> CETAK KONTRAK
+              </motion.button>
+              <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} onClick={onClose}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', padding: '0.9rem', borderRadius: '50px', cursor: 'pointer', background: '#fff', color: '#374151', border: '2px solid #e5e7eb', fontWeight: 700, fontSize: '0.8rem', letterSpacing: '0.05em', fontFamily: 'inherit' }}>
+                <X size={16} /> TUTUP
+              </motion.button>
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="modal-overlay" style={{ zIndex: 250 }}>
+      <motion.div initial={{ y: 40, opacity: 0, scale: 0.95 }} animate={{ y: 0, opacity: 1, scale: 1 }} exit={{ y: 40, opacity: 0, scale: 0.95 }}
+        style={{ background: '#fff', borderRadius: '20px', padding: '0', width: '500px', maxWidth: '92%', maxHeight: '90vh', overflowY: 'auto', position: 'relative', boxShadow: '0 25px 60px rgba(0,0,0,0.2)' }}>
+
+        {/* Header Banner */}
+        <div style={{ background: 'linear-gradient(135deg, #C7A07A, #a98973, #8B7355)', padding: '2rem 2rem 1.5rem', borderRadius: '20px 20px 0 0', position: 'relative', overflow: 'hidden' }}>
+          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 20% 50%, rgba(255,255,255,0.15) 0%, transparent 60%)', pointerEvents: 'none' }} />
+          <button onClick={onClose} style={{ position: 'absolute', top: '1rem', right: '1rem', background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: '50%', width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', color: '#fff' }}>
+            <X size={18} />
+          </button>
+          <FileText size={36} style={{ color: 'rgba(255,255,255,0.9)', marginBottom: '0.75rem' }} />
+          <h2 style={{ fontFamily: 'var(--font-serif)', fontSize: '1.5rem', color: '#fff', marginBottom: '0.3rem' }}>Kontrak Pelanggan</h2>
+          <p style={{ color: 'rgba(255,255,255,0.8)', fontSize: '0.82rem' }}>Lengkapi data diri dan setujui ketentuan penggunaan</p>
+        </div>
+
+        {/* Form Body */}
+        <div style={{ padding: '2rem' }}>
+          {error && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#fef2f2', padding: '0.75rem 1rem', borderRadius: '10px', border: '1px solid #fecaca', marginBottom: '1.25rem' }}>
+              <AlertTriangle size={16} style={{ color: '#ef4444', flexShrink: 0 }} />
+              <span style={{ fontSize: '0.82rem', color: '#dc2626' }}>{error}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            <div>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6b7280', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <UserCheck size={14} /> Nama Lengkap *
+              </label>
+              <input style={inputStyle} value={nama} onChange={e => setNama(e.target.value)} placeholder="Masukkan nama lengkap Anda" onFocus={e => { e.target.style.borderColor = '#C7A07A'; e.target.style.background = '#fff'; }} onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.background = '#fafafa'; }} />
+            </div>
+
+            <div>
+              <label style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#6b7280', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <Phone size={14} /> Nomor Telepon *
+              </label>
+              <input style={inputStyle} value={telepon} onChange={e => setTelepon(e.target.value)} placeholder="08xxxxxxxxxx" type="tel" onFocus={e => { e.target.style.borderColor = '#C7A07A'; e.target.style.background = '#fff'; }} onBlur={e => { e.target.style.borderColor = '#e5e7eb'; e.target.style.background = '#fafafa'; }} />
+            </div>
+
+            {/* Terms & Conditions Box */}
+            <div style={{ background: '#f9fafb', borderRadius: '12px', border: '1px solid #e5e7eb', padding: '1.25rem', maxHeight: '180px', overflowY: 'auto' }}>
+              <h4 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', marginBottom: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                <FileText size={14} /> Syarat & Ketentuan Penggunaan
+              </h4>
+              <div style={{ fontSize: '0.78rem', color: '#6b7280', lineHeight: 1.7 }}>
+                <p style={{ marginBottom: '0.5rem' }}>Dengan menyetujui kontrak ini, Anda menyatakan bahwa:</p>
+                <ol style={{ paddingLeft: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  <li>Data yang Anda berikan adalah benar dan akurat.</li>
+                  <li>Anda bersedia menerima informasi terkait layanan Threemi Sweet melalui nomor telepon yang diberikan.</li>
+                  <li>Anda setuju untuk menggunakan website ini sesuai dengan ketentuan yang berlaku.</li>
+                  <li>Data pribadi Anda akan dijaga kerahasiaannya dan tidak akan dibagikan kepada pihak ketiga tanpa izin.</li>
+                  <li>Threemi Sweet berhak mengubah syarat dan ketentuan ini sewaktu-waktu dengan pemberitahuan.</li>
+                  <li>Anda bertanggung jawab atas semua aktivitas yang dilakukan melalui akun Anda di website ini.</li>
+                </ol>
+              </div>
+            </div>
+
+            {/* Checkbox Agreement */}
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', cursor: 'pointer', padding: '0.75rem 1rem', borderRadius: '12px', border: agreed ? '2px solid #C7A07A' : '2px solid #e5e7eb', background: agreed ? 'rgba(199,160,122,0.06)' : '#fff', transition: 'all 0.3s' }}>
+              <input type="checkbox" checked={agreed} onChange={e => setAgreed(e.target.checked)}
+                style={{ width: '20px', height: '20px', accentColor: '#C7A07A', marginTop: '2px', flexShrink: 0, cursor: 'pointer' }} />
+              <span style={{ fontSize: '0.85rem', color: '#374151', lineHeight: 1.5 }}>
+                Saya telah membaca, memahami, dan <strong>menyetujui</strong> seluruh syarat dan ketentuan penggunaan website Threemi Sweet.
+              </span>
+            </label>
+
+            <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} type="submit" disabled={loading}
+              style={{
+                width: '100%', padding: '1rem', borderRadius: '50px', border: 'none', cursor: loading ? 'not-allowed' : 'pointer',
+                background: agreed ? 'linear-gradient(135deg, #C7A07A, #a98973)' : '#d1d5db',
+                color: '#fff', fontWeight: 700, fontSize: '0.85rem', letterSpacing: '0.05em', fontFamily: 'inherit',
+                boxShadow: agreed ? '0 4px 14px rgba(199,160,122,0.35)' : 'none', transition: 'all 0.3s', opacity: loading ? 0.6 : 1,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem'
+              }}>
+              <FileText size={16} />
+              {loading ? 'MENYIMPAN...' : 'KIRIM & SETUJUI KONTRAK'}
+            </motion.button>
+          </form>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+// Admin Contracts Panel
+const AdminContractsPanel = () => {
+  const [contracts, setContracts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [viewContract, setViewContract] = useState(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+
+  const fetchContracts = useCallback(async () => {
+    try {
+      const res = await fetch('http://localhost:5000/contracts');
+      const data = await res.json();
+      if (res.ok && data.data) setContracts(data.data);
+    } catch { console.log('Gagal fetch contracts'); }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchContracts(); }, [fetchContracts]);
+
+  const updateStatus = async (id, status) => {
+    try {
+      const res = await fetch(`http://localhost:5000/contracts/${id}/status`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status })
+      });
+      if (res.ok) fetchContracts();
+      else alert('Gagal mengupdate status');
+    } catch { alert('Error menghubungi server'); }
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      const res = await fetch(`http://localhost:5000/contracts/${id}`, { method: 'DELETE' });
+      if (res.ok) { setDeleteConfirm(null); fetchContracts(); }
+      else alert('Gagal menghapus kontrak');
+    } catch { alert('Error menghubungi server'); }
+  };
+
+  const statusColors = { Active: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' }, Suspended: { bg: '#fffbeb', color: '#d97706', border: '#fde68a' }, Terminated: { bg: '#fef2f2', color: '#ef4444', border: '#fecaca' } };
+
+  return (
+    <section style={{ marginTop: '2.5rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
+        <div>
+          <h2 style={{ fontSize: '1.4rem', color: '#1a1a1a', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <ClipboardList size={22} /> Data Pelanggan
+          </h2>
+          <p style={{ fontSize: '0.8rem', color: '#9ca3af', margin: '0.25rem 0 0' }}>{contracts.length} pelanggan  terdaftar</p>
+        </div>
+        <motion.button whileHover={{ scale: 1.03 }} whileTap={{ scale: 0.97 }} onClick={fetchContracts}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.6rem 1.2rem', background: '#f3f4f6', color: '#374151', border: 'none', borderRadius: '50px', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>
+          ↻ REFRESH
+        </motion.button>
+      </div>
+
+      {loading ? (
+        <div style={{ textAlign: 'center', padding: '3rem', color: '#9ca3af' }}>Memuat data kontrak...</div>
+      ) : contracts.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '3rem', background: '#f9fafb', borderRadius: '12px', border: '2px dashed #e5e7eb' }}>
+          <ClipboardList size={40} style={{ color: '#d1d5db', marginBottom: '0.75rem' }} />
+          <p style={{ color: '#9ca3af', fontSize: '0.9rem' }}>Belum ada kontrak pelanggan.</p>
+        </div>
+      ) : (
+        <div style={{ display: 'grid', gap: '0.75rem' }}>
+          {contracts.map(c => {
+            const sc = statusColors[c.status] || statusColors.Active;
+            return (
+              <motion.div key={c.id} layout style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '1rem', alignItems: 'center', padding: '1rem 1.25rem', background: '#fff', borderRadius: '10px', border: '1px solid #f3f4f6', boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.9rem', color: '#1a1a1a' }}>{c.nama_pelanggan}</div>
+                  <div style={{ fontSize: '0.75rem', color: '#9ca3af', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.25rem' }}><Phone size={11} /> {c.nomor_telepon}</span>
+                    {c.username && <span>@{c.username}</span>}
+                    <span>{new Date(c.created_at).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                  </div>
+                </div>
+                <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '4px 10px', borderRadius: '20px', background: sc.bg, color: sc.color, border: `1px solid ${sc.border}` }}>{c.status}</span>
+                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => setViewContract(c)}
+                  style={{ width: '36px', height: '36px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#eff6ff', border: 'none', color: '#2563eb', cursor: 'pointer' }}>
+                  <Eye size={16} />
+                </motion.button>
+                <motion.button whileHover={{ scale: 1.1 }} whileTap={{ scale: 0.9 }} onClick={() => setDeleteConfirm(c)}
+                  style={{ width: '36px', height: '36px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fef2f2', border: 'none', color: '#ef4444', cursor: 'pointer' }}>
+                  <Trash2 size={16} />
+                </motion.button>
+              </motion.div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* View Contract Detail Modal */}
+      <AnimatePresence>
+        {viewContract && (
+          <div className="modal-overlay" style={{ zIndex: 300 }}>
+            <motion.div initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 30, opacity: 0 }}
+              style={{ background: '#fff', borderRadius: '16px', padding: '2rem', width: '480px', maxWidth: '92%', maxHeight: '85vh', overflowY: 'auto', position: 'relative', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }}>
+              <button onClick={() => setViewContract(null)} className="btn-close"><X size={20} /></button>
+              <h3 style={{ fontFamily: 'var(--font-serif)', fontSize: '1.3rem', marginBottom: '1.5rem', color: '#1a1a1a' }}>Detail Kontrak</h3>
+
+              <div style={{ display: 'grid', gap: '1rem' }}>
+                {[
+                  { label: 'ID Kontrak', value: `#CTR-${String(viewContract.id).padStart(4, '0')}` },
+                  { label: 'Nama Pelanggan', value: viewContract.nama_pelanggan },
+                  { label: 'Nomor Telepon', value: viewContract.nomor_telepon },
+                  { label: 'Username', value: viewContract.username || '-' },
+                  { label: 'Persetujuan', value: viewContract.agreement_accepted ? '✅ Disetujui' : '❌ Belum' },
+                  { label: 'Tanggal Kontrak', value: new Date(viewContract.created_at).toLocaleString('id-ID') },
+                  { label: 'IP Address', value: viewContract.ip_address || '-' },
+                ].map((row, i) => (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.6rem 0', borderBottom: '1px solid #f3f4f6' }}>
+                    <span style={{ fontSize: '0.8rem', color: '#9ca3af' }}>{row.label}</span>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#374151' }}>{row.value}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Status Buttons */}
+              <div style={{ marginTop: '1.5rem' }}>
+                <p style={{ fontSize: '0.72rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', color: '#9ca3af', marginBottom: '0.75rem' }}>Ubah Status</p>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  {['Active', 'Suspended', 'Terminated'].map(s => (
+                    <button key={s} onClick={() => { updateStatus(viewContract.id, s); setViewContract({ ...viewContract, status: s }); }}
+                      style={{
+                        flex: 1, padding: '0.65rem', borderRadius: '8px', border: viewContract.status === s ? `2px solid ${statusColors[s].color}` : '2px solid #e5e7eb',
+                        background: viewContract.status === s ? statusColors[s].bg : '#fff', color: viewContract.status === s ? statusColors[s].color : '#6b7280',
+                        fontWeight: 700, fontSize: '0.72rem', cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.2s'
+                      }}>{s}</button>
+                  ))}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation */}
+      <AnimatePresence>
+        {deleteConfirm && (
+          <div className="modal-overlay" style={{ zIndex: 300 }}>
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+              style={{ background: '#fff', borderRadius: '16px', padding: '2rem', width: '400px', maxWidth: '90%', textAlign: 'center', boxShadow: '0 25px 50px rgba(0,0,0,0.25)' }}>
+              <div style={{ width: '56px', height: '56px', borderRadius: '50%', background: '#fef2f2', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+                <Trash2 size={24} style={{ color: '#ef4444' }} />
+              </div>
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>Hapus Kontrak?</h3>
+              <p style={{ fontSize: '0.85rem', color: '#6b7280', marginBottom: '1.5rem' }}>Kontrak <strong>"{deleteConfirm.nama_pelanggan}"</strong> akan dihapus permanen.</p>
+              <div style={{ display: 'flex', gap: '0.75rem' }}>
+                <button onClick={() => handleDelete(deleteConfirm.id)} style={{ flex: 1, padding: '0.8rem', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '50px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>HAPUS</button>
+                <button onClick={() => setDeleteConfirm(null)} style={{ flex: 1, padding: '0.8rem', background: '#fff', color: '#374151', border: '2px solid #e5e7eb', borderRadius: '50px', fontWeight: 700, fontSize: '0.8rem', cursor: 'pointer', fontFamily: 'inherit' }}>BATAL</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+    </section>
+  );
+};
+
 function App() {
   const [produkKue, setProdukKue] = useState(produkKueData);
   const [filter, setFilter] = useState("SEMUA PRODUK");
@@ -374,6 +1155,7 @@ function App() {
   const [pakasirData, setPakasirData] = useState(null); // { order_id, amount, payment_url, ... }
   const [receiptData, setReceiptData] = useState(null);
   const [showReceipt, setShowReceipt] = useState(false);
+  const [showContractModal, setShowContractModal] = useState(false);
   const qrisTimerRef = useRef(null);
   const qrisPollingRef = useRef(null);
 
@@ -381,39 +1163,31 @@ function App() {
   const categories = ["SEMUA PRODUK", "PRODUK TERLARIS", "WHOLE CAKE", "CHEESECAKE", "BENTO CAKE", "CUSTOM CAKE"];
   const filteredCakes = produkKue.filter(k => k.nama.toLowerCase().includes(searchQuery.toLowerCase()));
 
-  // Handle input changes in AdminPanel
-  const handleChange = (id, field, value) => {
-    setProdukKue(prev =>
-      prev.map(item => (item.id === id ? { ...item, [field]: value } : item))
-    );
-  };
-
-  // Save changes to backend (placeholder endpoint)
-  const saveChanges = async () => {
+  // Fetch products from database
+  const fetchProducts = useCallback(async () => {
     try {
-      const response = await fetch('http://localhost:5000/products', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ products: produkKue })
-      });
-      if (response.ok) {
-        alert('Perubahan berhasil disimpan');
-      } else {
-        const data = await response.json();
-        alert(data.message || 'Gagal menyimpan perubahan');
+      const res = await fetch('http://localhost:5000/products');
+      const data = await res.json();
+      if (res.ok && data.data) {
+        setProdukKue(data.data);
       }
-    } catch (error) {
-      console.error(error);
-      alert('Error menghubungi server');
+    } catch (err) {
+      console.log('Using fallback product data');
     }
-  };
+  }, []);
+
+  // Load products from DB on mount
+  useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
   const displayedGroups = filter === "SEMUA PRODUK"
     ? categories.filter(c => c !== "SEMUA PRODUK" && c !== "PRODUK TERLARIS").map(cat => ({
       title: cat,
       cakes: filteredCakes.filter(k => k.kategori.toUpperCase() === cat)
     })).filter(g => g.cakes.length > 0)
     : filter === "PRODUK TERLARIS"
-      ? [{ title: "PRODUK TERLARIS", cakes: filteredCakes.filter(k => k.tags.includes("Best Seller")) }].filter(g => g.cakes.length > 0)
+      ? [{ title: "PRODUK TERLARIS", cakes: filteredCakes.filter(k => Array.isArray(k.tags) ? k.tags.includes("Best Seller") : (k.tags || '').includes("Best Seller")) }].filter(g => g.cakes.length > 0)
       : [{ title: filter, cakes: filteredCakes.filter(k => k.kategori.toUpperCase() === filter) }].filter(g => g.cakes.length > 0);
 
   useEffect(() => {
@@ -448,7 +1222,7 @@ function App() {
           if (response.ok) {
             const now = new Date();
             setReceiptData({
-              transactionId: 'TMS-' + now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0') + '-' + String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0') + String(now.getSeconds()).padStart(2,'0'),
+              transactionId: 'TMS-' + now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0') + '-' + String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0') + String(now.getSeconds()).padStart(2, '0'),
               date: now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
               time: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
               username: user.username,
@@ -617,6 +1391,7 @@ function App() {
             <span className="nav-link" onClick={scrollToTop}>APA YANG BARU</span>
             <span className="nav-link" onClick={scrollToProducts}>PRODUK</span>
             <a href="https://www.google.com/maps?q=Threemisweet+by+Mila,+Jl.+Mekar+1,+Kp+Gantungan+No.8,+RT.02/RW.22,+Pasirlayung,+Kec.+Cimenyan,+Kabupaten+Bandung,+Jawa+Barat+40197&ftid=0x2e68e737ee00929f:0x7d31bb6442f3edb1&entry=gps&lucs=,94242511,47071704,47069508,94218641,94203019,47084304,94208458,94208447&g_ep=CAISEjI0LjUwLjAuNzA0NDI3ODkxMBgAINeCAypILDk0MjQyNTExLDQ3MDcxNzA0LDQ3MDY5NTA4LDk0MjE4NjQxLDk0MjAzMDE5LDQ3MDg0MzA0LDk0MjA4NDU4LDk0MjA4NDQ3QgJJRA%3D%3D&g_st=ic" target="_blank" rel="noreferrer" className="nav-link" style={{ textDecoration: 'none' }}>LOKASI</a>
+            <span className="nav-link" onClick={() => setShowContractModal(true)}>KONTRAK</span>
             <span className="nav-link">HUBUNGI KAMI</span>
           </div>
 
@@ -1168,7 +1943,7 @@ function App() {
                           const paymentLabels = { cash: 'Tunai (Cash)', debit: 'Transfer Debit (BCA)', qris: 'QRIS' };
                           const now = new Date();
                           setReceiptData({
-                            transactionId: 'TMS-' + now.getFullYear() + String(now.getMonth()+1).padStart(2,'0') + String(now.getDate()).padStart(2,'0') + '-' + String(now.getHours()).padStart(2,'0') + String(now.getMinutes()).padStart(2,'0') + String(now.getSeconds()).padStart(2,'0'),
+                            transactionId: 'TMS-' + now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0') + '-' + String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0') + String(now.getSeconds()).padStart(2, '0'),
                             date: now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
                             time: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
                             username: user.username,
@@ -1225,20 +2000,32 @@ function App() {
         )}
       </AnimatePresence>
 
+      {/* Customer Contract Modal */}
+      <AnimatePresence>
+        {showContractModal && (
+          <CustomerContractModal
+            onClose={() => setShowContractModal(false)}
+            onSuccess={() => { }}
+            username={isLoggedIn ? user.username : ''}
+          />
+        )}
+      </AnimatePresence>
+
       {/* KONTEN UTAMA: Berbeda Berdasarkan Role */}
       {isLoggedIn && role === 'admin' ? (
         <main style={{ padding: '80px 5% 2rem', background: '#f4f4f4', minHeight: '100vh' }}>
           <div style={{ background: '#fff', padding: '2rem', borderRadius: '15px', boxShadow: '0 10px 30px rgba(0,0,0,0.05)' }}>
             <div style={{ borderBottom: '2px solid #eee', marginBottom: '2rem', paddingBottom: '1rem' }}>
               <h1 style={{ fontSize: '2rem', color: '#333' }}>Dashboard Admin</h1>
-              <p style={{ color: '#666' }}>Selamat datang, {user.username}. Kelola katalog produk Anda di sini.</p>
+              <p style={{ color: '#666' }}>Selamat datang, {user.username}. Kelola produk dan kontrak pelanggan Anda di sini.</p>
             </div>
 
             <AdminPanel
               produkKue={produkKue}
-              handleChange={handleChange}
-              saveChanges={saveChanges}
+              onRefresh={fetchProducts}
             />
+
+            <AdminContractsPanel />
           </div>
         </main>
       ) : (
