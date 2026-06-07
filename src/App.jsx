@@ -4,6 +4,8 @@ import { ShoppingBag, Search, User, Menu, Globe, ChevronDown, ChevronLeft, Chevr
 import './index.css';
 import './MoneyDetector.css';
 import QrisCode from './QrisCode';
+import { supabase } from './lib/supabase'
+import { signUp, signIn, getProducts, createProduct, updateProduct, deleteProduct, uploadProductImage, createOrder, createQrisTransaction, checkQrisStatus, createContract, getContracts, updateContractStatus, deleteContract, checkUserRole } from './lib/api'
 
 // Lazy load MoneyDetector to avoid loading TF.js until needed
 const MoneyDetector = lazy(() => import('./MoneyDetector'));
@@ -127,28 +129,23 @@ const AdminPanel = ({ produkKue, onRefresh }) => {
     if (!newProduct.nama || !newProduct.harga) return alert('Nama dan Harga wajib diisi');
     setSaving(true);
     try {
-      const formData = new FormData();
-      formData.append('nama', newProduct.nama);
-      formData.append('kategori', newProduct.kategori);
-      formData.append('harga', newProduct.harga);
-      formData.append('tags', newProduct.tags);
+      let imageUrl = newProduct.img || '';
       if (newImageFile) {
-        formData.append('image', newImageFile);
-      } else if (newProduct.img) {
-        formData.append('img', newProduct.img);
+        imageUrl = await uploadProductImage(newImageFile)
       }
-      const res = await fetch('http://localhost:5000/products', { method: 'POST', body: formData });
-      const data = await res.json();
-      if (res.ok) {
-        setNewProduct({ nama: '', kategori: 'Whole Cake', harga: '', img: '', tags: '' });
-        setNewImageFile(null);
-        setNewImagePreview('');
-        setShowAddForm(false);
-        onRefresh();
-      } else {
-        alert(data.message || 'Gagal menambahkan produk');
-      }
-    } catch { alert('Error menghubungi server'); }
+      await createProduct({
+        nama: newProduct.nama,
+        kategori: newProduct.kategori,
+        harga: newProduct.harga,
+        img: imageUrl,
+        tags: newProduct.tags
+      })
+      setNewProduct({ nama: '', kategori: 'Whole Cake', harga: '', img: '', tags: '' });
+      setNewImageFile(null);
+      setNewImagePreview('');
+      setShowAddForm(false);
+      onRefresh();
+    } catch (err) { alert(err.message || 'Gagal menambahkan produk'); }
     setSaving(false);
   };
 
@@ -157,42 +154,32 @@ const AdminPanel = ({ produkKue, onRefresh }) => {
     if (!editingProduct) return;
     setSaving(true);
     try {
-      const formData = new FormData();
-      formData.append('nama', editingProduct.nama);
-      formData.append('kategori', editingProduct.kategori);
-      formData.append('harga', editingProduct.harga);
-      formData.append('tags', Array.isArray(editingProduct.tags) ? editingProduct.tags.join(',') : editingProduct.tags);
+      let imageUrl = editingProduct.img || '';
       if (editImageFile) {
-        formData.append('image', editImageFile);
-      } else {
-        formData.append('img', editingProduct.img || '');
+        imageUrl = await uploadProductImage(editImageFile)
       }
-      const res = await fetch(`http://localhost:5000/products/${editingProduct.id}`, { method: 'PUT', body: formData });
-      if (res.ok) {
-        setEditingProduct(null);
-        setEditImageFile(null);
-        setEditImagePreview('');
-        onRefresh();
-      } else {
-        const data = await res.json();
-        alert(data.message || 'Gagal mengupdate produk');
-      }
-    } catch { alert('Error menghubungi server'); }
+      await updateProduct(editingProduct.id, {
+        nama: editingProduct.nama,
+        kategori: editingProduct.kategori,
+        harga: editingProduct.harga,
+        img: imageUrl,
+        tags: Array.isArray(editingProduct.tags) ? editingProduct.tags.join(',') : editingProduct.tags
+      })
+      setEditingProduct(null);
+      setEditImageFile(null);
+      setEditImagePreview('');
+      onRefresh();
+    } catch (err) { alert(err.message || 'Gagal mengupdate produk'); }
     setSaving(false);
   };
 
   // DELETE
   const handleDelete = async (id) => {
     try {
-      const res = await fetch(`http://localhost:5000/products/${id}`, { method: 'DELETE' });
-      if (res.ok) {
-        setDeleteConfirm(null);
-        onRefresh();
-      } else {
-        const data = await res.json();
-        alert(data.message || 'Gagal menghapus produk');
-      }
-    } catch { alert('Error menghubungi server'); }
+      await deleteProduct(id)
+      setDeleteConfirm(null);
+      onRefresh();
+    } catch (err) { alert(err.message || 'Gagal menghapus produk'); }
   };
 
   const inputStyle = { width: '100%', padding: '0.6rem 0.75rem', border: '1px solid #e5e7eb', borderRadius: '8px', fontSize: '0.85rem', fontFamily: 'inherit', outline: 'none', transition: 'border-color 0.2s' };
@@ -735,24 +722,14 @@ const CustomerContractModal = ({ onClose, onSuccess, username }) => {
 
     setLoading(true);
     try {
-      const res = await fetch('http://localhost:5000/contracts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          nama_pelanggan: nama.trim(),
-          nomor_telepon: telepon.trim(),
-          username: username || null,
-          agreement_accepted: true,
-          agreement_text: 'Menyetujui syarat dan ketentuan penggunaan website Threemi Sweet'
-        })
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setSuccess(true);
-      } else {
-        setError(data.message || 'Gagal menyimpan kontrak');
-      }
-    } catch { setError('Gagal menghubungi server'); }
+      await createContract({
+        nama_pelanggan: nama.trim(),
+        nomor_telepon: telepon.trim(),
+        username: username || null,
+        agreement_text: 'Menyetujui syarat dan ketentuan penggunaan website Threemi Sweet'
+      })
+      setSuccess(true);
+    } catch (err) { setError(err.message || 'Gagal menyimpan kontrak'); }
     setLoading(false);
   };
 
@@ -978,9 +955,8 @@ const AdminContractsPanel = () => {
 
   const fetchContracts = useCallback(async () => {
     try {
-      const res = await fetch('http://localhost:5000/contracts');
-      const data = await res.json();
-      if (res.ok && data.data) setContracts(data.data);
+      const data = await getContracts()
+      setContracts(data);
     } catch { console.log('Gagal fetch contracts'); }
     setLoading(false);
   }, []);
@@ -989,20 +965,17 @@ const AdminContractsPanel = () => {
 
   const updateStatus = async (id, status) => {
     try {
-      const res = await fetch(`http://localhost:5000/contracts/${id}/status`, {
-        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status })
-      });
-      if (res.ok) fetchContracts();
-      else alert('Gagal mengupdate status');
-    } catch { alert('Error menghubungi server'); }
+      await updateContractStatus(id, status)
+      fetchContracts();
+    } catch { alert('Gagal mengupdate status'); }
   };
 
   const handleDelete = async (id) => {
     try {
-      const res = await fetch(`http://localhost:5000/contracts/${id}`, { method: 'DELETE' });
-      if (res.ok) { setDeleteConfirm(null); fetchContracts(); }
-      else alert('Gagal menghapus kontrak');
-    } catch { alert('Error menghubungi server'); }
+      await deleteContract(id)
+      setDeleteConfirm(null);
+      fetchContracts();
+    } catch { alert('Gagal menghapus kontrak'); }
   };
 
   const statusColors = { Active: { bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' }, Suspended: { bg: '#fffbeb', color: '#d97706', border: '#fde68a' }, Terminated: { bg: '#fef2f2', color: '#ef4444', border: '#fecaca' } };
@@ -1163,22 +1136,26 @@ function App() {
   const categories = ["SEMUA PRODUK", "PRODUK TERLARIS", "WHOLE CAKE", "CHEESECAKE", "BENTO CAKE", "CUSTOM CAKE"];
   const filteredCakes = produkKue.filter(k => k.nama.toLowerCase().includes(searchQuery.toLowerCase()));
 
-  // Fetch products from database
+  // Fetch products from Supabase
   const fetchProducts = useCallback(async () => {
     try {
-      const res = await fetch('http://localhost:5000/products');
-      const data = await res.json();
-      if (res.ok && data.data) {
-        setProdukKue(data.data);
-      }
+      const data = await getProducts()
+      if (data && data.length > 0) setProdukKue(data);
     } catch (err) {
       console.log('Using fallback product data');
     }
   }, []);
 
-  // Load products from DB on mount
+  // Load products & restore session on mount
   useEffect(() => {
     fetchProducts();
+    checkUserRole().then((session) => {
+      if (session.isLoggedIn) {
+        setIsLoggedIn(true)
+        setUser({ username: session.username })
+        setRole(session.role)
+      }
+    })
   }, [fetchProducts]);
 
   const displayedGroups = filter === "SEMUA PRODUK"
@@ -1208,42 +1185,33 @@ function App() {
       (async () => {
         try {
           const totalPrice = cartItems.reduce((acc, item) => acc + item.cake.harga, 0);
-          const response = await fetch('http://localhost:5000/checkout', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              username: user.username,
-              totalPrice: totalPrice,
-              cartItems: cartItems,
-              paymentMethod: 'qris'
-            })
+          await createOrder({
+            username: user.username,
+            totalPrice: totalPrice,
+            cartItems: cartItems,
+            paymentMethod: 'qris'
+          })
+          const now = new Date();
+          setReceiptData({
+            transactionId: 'TMS-' + now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0') + '-' + String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0') + String(now.getSeconds()).padStart(2, '0'),
+            date: now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+            time: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            username: user.username,
+            paymentMethod: 'qris',
+            paymentLabel: 'QRIS',
+            items: [...cartItems],
+            totalPrice: totalPrice
           });
-          const data = await response.json();
-          if (response.ok) {
-            const now = new Date();
-            setReceiptData({
-              transactionId: 'TMS-' + now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0') + '-' + String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0') + String(now.getSeconds()).padStart(2, '0'),
-              date: now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
-              time: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-              username: user.username,
-              paymentMethod: 'qris',
-              paymentLabel: 'QRIS',
-              items: [...cartItems],
-              totalPrice: totalPrice
-            });
-            setShowReceipt(true);
-            setCartItems([]);
-            setShowCheckout(false);
-            setPaymentMethod('');
-            setQrisScanned(false);
-            setQrisCountdown(0);
-            setPakasirData(null);
-            setQrisUseFallback(false);
-          } else {
-            alert(data.message || 'Gagal melakukan checkout.');
-          }
+          setShowReceipt(true);
+          setCartItems([]);
+          setShowCheckout(false);
+          setPaymentMethod('');
+          setQrisScanned(false);
+          setQrisCountdown(0);
+          setPakasirData(null);
+          setQrisUseFallback(false);
         } catch (error) {
-          alert('Gagal menghubungi server. Pastikan backend menyala.');
+          alert(error.message || 'Gagal melakukan checkout.');
         }
       })();
     }
@@ -1255,15 +1223,7 @@ function App() {
     if (pakasirData && !qrisScanned) {
       qrisPollingRef.current = setInterval(async () => {
         try {
-          const res = await fetch('http://localhost:5000/qris/status', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              order_id: pakasirData.order_id,
-              amount: pakasirData.amount
-            })
-          });
-          const data = await res.json();
+          const data = await checkQrisStatus(pakasirData.order_id, pakasirData.amount)
           if (data.status === 'success' && data.data.payment_status === 'completed') {
             // Pembayaran berhasil via Pakasir!
             clearInterval(qrisPollingRef.current);
@@ -1297,22 +1257,16 @@ function App() {
 
     try {
       const totalPrice = cartItems.reduce((acc, item) => acc + item.cake.harga, 0);
-      const res = await fetch('http://localhost:5000/qris/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: user.username,
-          cartItems,
-          totalPrice
-        })
-      });
-      const data = await res.json();
+      const data = await createQrisTransaction({
+        username: user.username,
+        cartItems,
+        totalPrice
+      })
 
-      if (res.ok && data.status === 'success') {
+      if (data.status === 'success') {
         setPakasirData(data.data);
-        console.log('Pakasir QRIS created:', data.data);
+        console.log('QRIS created:', data.data);
       } else if (data.useFallback) {
-        // Pakasir belum dikonfigurasi, gunakan QR code lokal
         setQrisUseFallback(true);
       } else {
         alert(data.message || 'Gagal membuat QRIS');
@@ -1339,46 +1293,33 @@ function App() {
       return;
     }
 
-    const endpoint = isRegisterMode ? 'http://localhost:5000/register' : 'http://localhost:5000/login';
-
     try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          username: loginInput,
-          password: passwordInput,
-          role: 'buyer' // Setiap pendaftaran dari web otomatis menjadi pembeli
-        })
-      });
-      const data = await response.json();
-
-      if (response.ok) {
-        if (isRegisterMode) {
-          setAuthSuccess('Registrasi berhasil! Silakan login.');
-          setIsRegisterMode(false);
-          setPasswordInput('');
-        } else {
-          setUser({ username: data.user.username });
-          setRole(data.user.role || (data.user.username === 'admin' ? 'admin' : 'buyer'));
-          setIsLoggedIn(true);
-          setShowLoginModal(false);
-          setLoginInput('');
-          setPasswordInput('');
-          setAuthSuccess('');
-        }
+      if (isRegisterMode) {
+        await signUp(loginInput, passwordInput)
+        setAuthSuccess('Registrasi berhasil! Silakan login.');
+        setIsRegisterMode(false);
+        setPasswordInput('');
       } else {
-        setAuthError(data.message || 'Terjadi kesalahan pada input.');
+        const data = await signIn(loginInput, passwordInput)
+        setUser({ username: data.user.username });
+        setRole(data.user.role || (data.user.username === 'admin' ? 'admin' : 'buyer'));
+        setIsLoggedIn(true);
+        setShowLoginModal(false);
+        setLoginInput('');
+        setPasswordInput('');
+        setAuthSuccess('');
       }
     } catch (error) {
       console.error(error);
-      setAuthError('Gagal menghubungi server. Pastikan backend menyala.');
+      setAuthError(error.message || 'Gagal login. Periksa username dan password.');
     }
   };
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    await signOut()
     setIsLoggedIn(false);
     setUser({ username: '' });
+    setRole('buyer');
   };
 
   return (
@@ -1509,7 +1450,7 @@ function App() {
               <form onSubmit={handleAuth} className="form-group">
                 <input
                   type="text"
-                  placeholder="Username"
+                  placeholder="Email / Username"
                   value={loginInput}
                   onChange={(e) => setLoginInput(e.target.value)}
                   className="input-field"
@@ -1928,40 +1869,31 @@ function App() {
                         const totalPrice = cartItems.reduce((acc, item) => acc + item.cake.harga, 0);
                         const currentPaymentMethod = paymentMethod;
                         const currentCartItems = [...cartItems];
-                        const response = await fetch('http://localhost:5000/checkout', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            username: user.username,
-                            totalPrice: totalPrice,
-                            cartItems: cartItems,
-                            paymentMethod: currentPaymentMethod
-                          })
+                        await createOrder({
+                          username: user.username,
+                          totalPrice: totalPrice,
+                          cartItems: cartItems,
+                          paymentMethod: currentPaymentMethod
+                        })
+                        const paymentLabels = { cash: 'Tunai (Cash)', debit: 'Transfer Debit (BCA)', qris: 'QRIS' };
+                        const now = new Date();
+                        setReceiptData({
+                          transactionId: 'TMS-' + now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0') + '-' + String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0') + String(now.getSeconds()).padStart(2, '0'),
+                          date: now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+                          time: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+                          username: user.username,
+                          paymentMethod: currentPaymentMethod,
+                          paymentLabel: paymentLabels[currentPaymentMethod] || currentPaymentMethod,
+                          items: currentCartItems,
+                          totalPrice: totalPrice
                         });
-                        const data = await response.json();
-                        if (response.ok) {
-                          const paymentLabels = { cash: 'Tunai (Cash)', debit: 'Transfer Debit (BCA)', qris: 'QRIS' };
-                          const now = new Date();
-                          setReceiptData({
-                            transactionId: 'TMS-' + now.getFullYear() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0') + '-' + String(now.getHours()).padStart(2, '0') + String(now.getMinutes()).padStart(2, '0') + String(now.getSeconds()).padStart(2, '0'),
-                            date: now.toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
-                            time: now.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-                            username: user.username,
-                            paymentMethod: currentPaymentMethod,
-                            paymentLabel: paymentLabels[currentPaymentMethod] || currentPaymentMethod,
-                            items: currentCartItems,
-                            totalPrice: totalPrice
-                          });
-                          setShowReceipt(true);
-                          setCartItems([]);
-                          setShowCheckout(false);
-                          setPaymentMethod('');
-                          resetQrisState();
-                        } else {
-                          alert(data.message || 'Gagal melakukan checkout.');
-                        }
+                        setShowReceipt(true);
+                        setCartItems([]);
+                        setShowCheckout(false);
+                        setPaymentMethod('');
+                        resetQrisState();
                       } catch (error) {
-                        alert('Gagal menghubungi server. Pastikan backend menyala.');
+                        alert(error.message || 'Gagal melakukan checkout.');
                       }
                     }}
                   >
